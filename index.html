@@ -1,94 +1,122 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gym Voice</title>
+
+<style>
+* {
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  background: #0b132b;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-family: system-ui;
+  touch-action: manipulation;
+}
+
+#mic {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: #22c55e;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 64px;
+  cursor: pointer;
+}
+
+#mic.recording {
+  background: #ef4444;
+}
+
+#status {
+  margin-top: 20px;
+  font-size: 16px;
+}
+
+#summary {
+  margin-top: 12px;
+  font-size: 14px;
+  opacity: 0.8;
+}
+</style>
+</head>
+
+<body>
+
+<div id="mic">🏋️</div>
+<div id="status">Toca el botón para hablar</div>
+<div id="summary"></div>
+
 <script>
 const SpeechRecognition =
   window.SpeechRecognition || window.webkitSpeechRecognition;
 
-const status = document.getElementById("status");
 const mic = document.getElementById("mic");
+const status = document.getElementById("status");
 const summary = document.getElementById("summary");
 
 if (!SpeechRecognition) {
-  status.textContent = "❌ Safari no soporta reconocimiento de voz";
-  throw new Error("No Speech API");
+  status.textContent = "❌ Safari no soporta voz";
+  throw new Error();
 }
 
 const recognition = new SpeechRecognition();
 recognition.lang = "es-ES";
 recognition.continuous = false;
 recognition.interimResults = false;
-recognition.maxAlternatives = 1;
 
-let listening = false;
+let recording = false;
 let log = JSON.parse(localStorage.getItem("trainLog")) || [];
 
-// 🔒 Evitar selección y menú táctil
-mic.style.userSelect = "none";
-mic.style.webkitUserSelect = "none";
-mic.style.webkitTouchCallout = "none";
-
-mic.addEventListener("pointerdown", (e) => {
-  e.preventDefault();
-  if (listening) return;
-
-  try {
-    recognition.start();
-    listening = true;
-    mic.classList.add("recording");
-    status.textContent = "🎙️ Escuchando...";
-  } catch (err) {
-    status.textContent = "❌ No se pudo iniciar el micrófono";
+mic.addEventListener("click", () => {
+  if (!recording) {
+    try {
+      recognition.start();
+      recording = true;
+      mic.classList.add("recording");
+      status.textContent = "🎙️ Escuchando… toca otra vez para parar";
+    } catch {
+      status.textContent = "❌ No se pudo iniciar el micrófono";
+    }
+  } else {
+    recognition.stop();
+    recording = false;
+    mic.classList.remove("recording");
+    status.textContent = "⏳ Procesando…";
   }
-});
-
-mic.addEventListener("pointerup", (e) => {
-  e.preventDefault();
-  if (!listening) return;
-
-  recognition.stop();
-  listening = false;
-  mic.classList.remove("recording");
 });
 
 recognition.onresult = (e) => {
   const text = e.results[0][0].transcript.toLowerCase();
 
-  const entry = parseTraining(text);
-  log.push(entry);
+  log.push({ date: new Date().toISOString(), text });
   localStorage.setItem("trainLog", JSON.stringify(log));
 
   status.textContent = "✅ Guardado";
-  updateSummary();
+  summary.textContent = text;
 };
 
-recognition.onerror = (e) => {
+recognition.onerror = () => {
   status.textContent = "❌ Error con el micrófono";
-  listening = false;
+  recording = false;
   mic.classList.remove("recording");
 };
-
-function parseTraining(text) {
-  const weight = text.match(/(\d+)\s?(kg|kilos?)/);
-  const reps = text.match(/(\d+)\s?(reps?|repeticiones?)/);
-
-  return {
-    date: new Date().toISOString(),
-    exercise: text,
-    weight: weight ? parseInt(weight[1]) : null,
-    reps: reps ? parseInt(reps[1]) : null
-  };
-}
-
-function updateSummary() {
-  if (log.length === 0) {
-    summary.textContent = "Aún no hay suficientes datos.";
-    return;
-  }
-
-  const last = log[log.length - 1];
-  summary.textContent =
-    `📊 Último:\n${last.exercise}\n` +
-    `${last.weight || "?"} kg · ${last.reps || "?"} reps`;
-}
-
-updateSummary();
 </script>
+
+</body>
+</html>
 
