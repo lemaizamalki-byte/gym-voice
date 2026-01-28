@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Gym Voice</title>
 
 <style>
@@ -16,12 +16,12 @@ body {
   margin: 0;
   height: 100vh;
   background: #0b132b;
-  font-family: system-ui;
-  color: white;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
+  align-items: center;
+  font-family: system-ui;
+  color: white;
 }
 
 #mic {
@@ -33,15 +33,18 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 64px;
+  box-shadow: 0 0 40px rgba(34,197,94,.6);
 }
 
 #mic.recording {
   background: #ef4444;
+  box-shadow: 0 0 40px rgba(239,68,68,.7);
 }
 
 #status {
   margin-top: 20px;
   font-size: 16px;
+  opacity: 0.9;
 }
 
 #notes {
@@ -49,15 +52,15 @@ body {
   bottom: 0;
   width: 100%;
   max-height: 35%;
-  background: rgba(0,0,0,0.35);
-  backdrop-filter: blur(8px);
+  background: rgba(255,255,255,0.05);
   padding: 12px;
   overflow-y: auto;
   font-size: 14px;
 }
+
 .note {
-  opacity: 0.85;
   margin-bottom: 6px;
+  opacity: 0.85;
 }
 </style>
 </head>
@@ -66,18 +69,21 @@ body {
 
 <div id="mic">🏋️</div>
 <div id="status">Mantén pulsado para hablar</div>
-
 <div id="notes"></div>
 
 <script>
 const SpeechRecognition = window.webkitSpeechRecognition;
+
 const mic = document.getElementById("mic");
 const status = document.getElementById("status");
 const notesBox = document.getElementById("notes");
 
+if (!SpeechRecognition) {
+  status.textContent = "❌ Safari no soporta reconocimiento de voz";
+}
+
 let recognition;
 let recording = false;
-let safetyTimeout;
 
 let log = JSON.parse(localStorage.getItem("gymLog")) || [];
 
@@ -91,60 +97,54 @@ function renderNotes() {
 
 renderNotes();
 
-function startRec() {
-  if (!SpeechRecognition) {
-    status.textContent = "❌ Voz no soportada";
-    return;
-  }
+/* INICIAR AL MANTENER PULSADO */
+mic.addEventListener("touchstart", (e) => {
+  e.preventDefault();
+  if (recording) return;
 
   recognition = new SpeechRecognition();
   recognition.lang = "es-ES";
-  recognition.interimResults = false;
   recognition.continuous = false;
+  recognition.interimResults = false;
 
-  recognition.onresult = e => {
-    const text = e.results[0][0].transcript;
-    log.push({ date: Date.now(), text });
-    localStorage.setItem("gymLog", JSON.stringify(log));
-    status.textContent = "✅ Guardado";
-    renderNotes();
-  };
-
-  recognition.onerror = () => {
-    status.textContent = "❌ Error de voz";
-  };
-
-  recognition.onend = () => {
-    clearTimeout(safetyTimeout);
-    recording = false;
-    mic.classList.remove("recording");
-  };
-
-  recognition.start();
-
-  safetyTimeout = setTimeout(() => {
-    recognition.stop();
-    status.textContent = "⏹️ Sin voz detectada";
-  }, 6000);
-}
-
-mic.addEventListener("touchstart", e => {
-  e.preventDefault();
-  if (recording) return;
   recording = true;
   mic.classList.add("recording");
   status.textContent = "🎙️ Escuchando…";
-  startRec();
+
+  recognition.start();
+
+  recognition.onresult = (e) => {
+    const text = e.results[0][0].transcript.toLowerCase();
+
+    log.push({
+      text,
+      date: new Date().toISOString()
+    });
+
+    localStorage.setItem("gymLog", JSON.stringify(log));
+    renderNotes();
+
+    status.textContent = "✅ Guardado";
+  };
+
+  recognition.onerror = () => {
+    status.textContent = "❌ Error con el micrófono";
+    recording = false;
+    mic.classList.remove("recording");
+  };
 });
 
-mic.addEventListener("touchend", e => {
-  e.preventDefault();
+/* PARAR AL SOLTAR */
+mic.addEventListener("touchend", () => {
   if (!recording) return;
-  recognition.stop();
+
+  recording = false;
+  mic.classList.remove("recording");
   status.textContent = "⏳ Procesando…";
+
+  recognition.stop();
 });
 </script>
 
 </body>
 </html>
-
