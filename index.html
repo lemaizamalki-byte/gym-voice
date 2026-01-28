@@ -1,72 +1,152 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <title>Gym Voice</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<title>Gym Voice</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <style>
-    body {
-      margin: 0;
-      height: 100vh;
-      background: #0f172a;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      align-items: center;
-      font-family: system-ui, -apple-system;
-      color: white;
-    }
+<style>
+body {
+  margin: 0;
+  height: 100vh;
+  background: #0f172a;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  font-family: system-ui;
+  color: white;
+}
 
-    .mic-container {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+.center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
-    .mic-button {
-      width: 140px;
-      height: 140px;
-      border-radius: 50%;
-      background: #22c55e;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 60px;
-      border: none;
-      box-shadow: 0 0 30px rgba(34,197,94,0.6);
-    }
+#mic {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: none;
+  font-size: 60px;
+  box-shadow: 0 0 30px rgba(34,197,94,0.6);
+}
 
-    .mic-button:active {
-      transform: scale(0.95);
-    }
+#mic.recording {
+  background: #ef4444;
+  box-shadow: 0 0 30px rgba(239,68,68,0.6);
+}
 
-    .notes {
-      width: 100%;
-      background: #020617;
-      padding: 20px;
-      text-align: center;
-      border-top: 1px solid #1e293b;
-    }
+#status {
+  text-align: center;
+  margin-bottom: 10px;
+}
 
-    .notes h3 {
-      margin: 0 0 10px;
-      font-size: 16px;
-      color: #94a3b8;
-    }
-  </style>
+#summary {
+  width: 100%;
+  background: #020617;
+  padding: 16px;
+  font-size: 14px;
+}
+</style>
 </head>
+
 <body>
 
-  <div class="mic-container">
-    <button class="mic-button">🏋️‍♂️</button>
-  </div>
+<div class="center">
+  <button id="mic">🏋️‍♂️</button>
+</div>
 
-  <div class="notes">
-    <h3>Progreso semanal</h3>
-    <p>Aquí aparecerán tus notas de entrenamiento</p>
-  </div>
+<div id="status">Mantén pulsado para hablar</div>
+
+<div id="summary"></div>
+
+<script>
+const SpeechRecognition =
+  window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (!SpeechRecognition) {
+  document.getElementById("status").textContent =
+    "❌ Safari no soporta reconocimiento de voz aquí";
+}
+
+const recognition = new SpeechRecognition();
+recognition.lang = "es-ES";
+recognition.continuous = false;
+recognition.interimResults = false;
+
+let log = JSON.parse(localStorage.getItem("trainLog")) || [];
+
+const mic = document.getElementById("mic");
+const status = document.getElementById("status");
+const summary = document.getElementById("summary");
+
+mic.addEventListener("touchstart", () => {
+  mic.classList.add("recording");
+  status.textContent = "🎙️ Escuchando...";
+  recognition.start();
+});
+
+mic.addEventListener("touchend", () => {
+  mic.classList.remove("recording");
+  recognition.stop();
+});
+
+recognition.onresult = (e) => {
+  const text = e.results[0][0].transcript.toLowerCase();
+
+  const entry = parseTraining(text);
+  log.push(entry);
+  localStorage.setItem("trainLog", JSON.stringify(log));
+
+  status.textContent = "✅ Guardado: " + entry.exercise;
+  updateSummary();
+};
+
+recognition.onerror = () => {
+  status.textContent = "❌ Error con el micrófono";
+};
+
+function parseTraining(text) {
+  const w = text.match(/(\d+(\.\d+)?)\s?(kg|kilos?)/);
+  const r = text.match(/(\d+)\s?(reps?|repeticiones?)/);
+
+  return {
+    date: new Date().toISOString(),
+    exercise: text.replace(/(\d+.*)/g,"").trim(),
+    weight: w ? parseFloat(w[1]) : null,
+    reps: r ? parseInt(r[1]) : null
+  };
+}
+
+function updateSummary() {
+  if (log.length < 2) {
+    summary.textContent = "Aún no hay suficientes datos.";
+    return;
+  }
+
+  const last = log[log.length - 1];
+  const prev = log[log.length - 2];
+
+  let msg = "📊 Último registro:\n";
+  msg += `${last.exercise} — ${last.weight || "?"}kg x ${last.reps || "?"}\n`;
+
+  if (last.weight && prev.weight && last.weight > prev.weight) {
+    msg += "✅ Progreso en peso\n";
+  }
+
+  if (last.reps && prev.reps && last.reps > prev.reps) {
+    msg += "✅ Progreso en repeticiones\n";
+  }
+
+  summary.textContent = msg;
+}
+
+updateSummary();
+</script>
 
 </body>
 </html>
