@@ -70,9 +70,7 @@ body {
 <div id="notes"></div>
 
 <script>
-const SpeechRecognition =
-  window.SpeechRecognition || window.webkitSpeechRecognition;
-
+const SpeechRecognition = window.webkitSpeechRecognition;
 const mic = document.getElementById("mic");
 const status = document.getElementById("status");
 const notesBox = document.getElementById("notes");
@@ -149,3 +147,4 @@ mic.addEventListener("touchend", e => {
 
 </body>
 </html>
+
