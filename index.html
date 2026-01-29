@@ -6,8 +6,6 @@
 <title>Gym Voice</title>
 
 <style>
-* { user-select: none; -webkit-user-select: none; }
-
 body {
   margin: 0;
   height: 100vh;
@@ -31,27 +29,22 @@ body {
   font-size: 64px;
 }
 
-#mic.recording { background: #ef4444; }
-
-#status {
-  margin-top: 18px;
-  font-size: 16px;
-  opacity: .9;
+#mic.recording {
+  background: #ef4444;
 }
 
-#notes {
+#status {
+  margin-top: 20px;
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+#audios {
   position: fixed;
   bottom: 0;
   width: 100%;
-  max-height: 35%;
-  overflow-y: auto;
-  background: rgba(0,0,0,.4);
+  background: rgba(0,0,0,0.4);
   padding: 10px;
-}
-
-.note {
-  font-size: 14px;
-  margin-bottom: 6px;
 }
 </style>
 </head>
@@ -59,110 +52,69 @@ body {
 <body>
 
 <div id="mic">🏋️</div>
-<div id="status">Mantén pulsado para hablar</div>
-<div id="notes"></div>
+<div id="status">Mantén pulsado para grabar</div>
+<div id="audios"></div>
 
 <script>
+let mediaRecorder;
+let chunks = [];
+let stream;
+
 const mic = document.getElementById("mic");
 const status = document.getElementById("status");
-const notesBox = document.getElementById("notes");
+const audios = document.getElementById("audios");
 
-let recognition = null;
-let recording = false;
-let safetyTimer = null;
-let startTime = 0;
+let recordings = JSON.parse(localStorage.getItem("gymAudios")) || [];
 
-let log = JSON.parse(localStorage.getItem("gymLog")) || [];
-
-function getWeek(date) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  return d.getFullYear() + "-W" +
-    Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-}
-
-function renderNotes() {
-  notesBox.innerHTML = log
-    .slice(-10)
+function renderAudios() {
+  audios.innerHTML = recordings
+    .slice(-5)
     .reverse()
-    .map(n => `<div class="note">🗓 ${n.week} · ${n.text}</div>`)
-    .join("");
+    .map(r => `
+      <div>
+        🗓 ${new Date(r.date).toLocaleString()}
+        <audio controls src="${r.url}"></audio>
+      </div>
+    `).join("");
 }
-renderNotes();
+renderAudios();
 
-function stopAll() {
-  if (recognition) {
-    try { recognition.abort(); } catch {}
-    recognition = null;
-  }
-  clearTimeout(safetyTimer);
-  recording = false;
-  mic.classList.remove("recording");
-}
+mic.addEventListener("touchstart", async () => {
+  if (mediaRecorder) return;
 
-mic.addEventListener("touchstart", () => {
-  if (recording) return;
+  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  mediaRecorder = new MediaRecorder(stream);
+  chunks = [];
 
-  if (!window.webkitSpeechRecognition) {
-    status.textContent = "❌ Safari no soporta voz";
-    return;
-  }
+  mediaRecorder.ondataavailable = e => chunks.push(e.data);
 
-  recognition = new webkitSpeechRecognition();
-  recognition.lang = "es-ES";
-  recognition.continuous = false;
-  recognition.interimResults = false;
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const url = URL.createObjectURL(blob);
 
-  recording = true;
-  startTime = Date.now();
-  mic.classList.add("recording");
-  status.textContent = "🎙️ Escuchando…";
-
-  recognition.start();
-
-  // ⏱️ CORTE DE SEGURIDAD (CLAVE)
-  safetyTimer = setTimeout(() => {
-    stopAll();
-    status.textContent = "⚠️ Tiempo agotado";
-  }, 7000);
-
-  recognition.onresult = (e) => {
-    stopAll();
-
-    const text = e.results?.[0]?.[0]?.transcript;
-    if (!text) {
-      status.textContent = "❌ No se detectó voz";
-      return;
-    }
-
-    const date = new Date().toISOString();
-    const duration = Math.round((Date.now() - startTime) / 1000);
-
-    log.push({
-      id: Date.now(),
-      date,
-      week: getWeek(date),
-      duration,
-      text
+    recordings.push({
+      date: new Date().toISOString(),
+      url
     });
 
-    localStorage.setItem("gymLog", JSON.stringify(log));
-    renderNotes();
+    localStorage.setItem("gymAudios", JSON.stringify(recordings));
+    renderAudios();
 
-    status.textContent = "✅ Grabación guardada";
+    status.textContent = "✅ Audio guardado";
+    mediaRecorder = null;
+    stream.getTracks().forEach(t => t.stop());
   };
 
-  recognition.onerror = () => {
-    stopAll();
-    status.textContent = "❌ Error de micrófono";
-  };
+  mediaRecorder.start();
+  mic.classList.add("recording");
+  status.textContent = "🎙️ Grabando…";
 });
 
 mic.addEventListener("touchend", () => {
-  if (!recording) return;
-  stopAll();
-  status.textContent = "⏳ Procesando…";
+  if (!mediaRecorder) return;
+  mediaRecorder.stop();
+  mic.classList.remove("recording");
+  status.textContent = "⏳ Guardando…";
 });
 </script>
 
