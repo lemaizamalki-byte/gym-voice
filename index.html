@@ -1,11 +1,17 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gym Voice</title>
 
 <style>
+* {
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
 body {
   margin: 0;
   height: 100vh;
@@ -19,14 +25,19 @@ body {
 }
 
 #mic {
-  width: 160px;
-  height: 160px;
+  width: 180px;
+  height: 180px;
   border-radius: 50%;
   background: #22c55e;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 64px;
+  font-size: 72px;
+
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 #mic.recording {
@@ -43,79 +54,80 @@ body {
   position: fixed;
   bottom: 0;
   width: 100%;
-  background: rgba(0,0,0,0.4);
+  max-height: 35%;
+  overflow-y: auto;
+  background: rgba(0,0,0,0.3);
   padding: 10px;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+
+.audio-item {
+  margin-bottom: 10px;
 }
 </style>
 </head>
 
 <body>
 
-<div id="mic">🏋️</div>
+<div id="mic" draggable="false">🏋️</div>
 <div id="status">Mantén pulsado para grabar</div>
+
 <div id="audios"></div>
 
 <script>
-let mediaRecorder;
-let chunks = [];
+let recorder;
 let stream;
+let chunks = [];
 
 const mic = document.getElementById("mic");
 const status = document.getElementById("status");
 const audios = document.getElementById("audios");
 
-let recordings = JSON.parse(localStorage.getItem("gymAudios")) || [];
-
-function renderAudios() {
-  audios.innerHTML = recordings
-    .slice(-5)
-    .reverse()
-    .map(r => `
-      <div>
-        🗓 ${new Date(r.date).toLocaleString()}
-        <audio controls src="${r.url}"></audio>
-      </div>
-    `).join("");
+function addAudio(blob) {
+  const url = URL.createObjectURL(blob);
+  const div = document.createElement("div");
+  div.className = "audio-item";
+  div.innerHTML = `
+    🗓 ${new Date().toLocaleString()}<br>
+    <audio controls src="${url}"></audio>
+  `;
+  audios.prepend(div);
 }
-renderAudios();
 
-mic.addEventListener("touchstart", async () => {
-  if (mediaRecorder) return;
+mic.addEventListener("touchstart", async (e) => {
+  e.preventDefault();
 
-  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  mediaRecorder = new MediaRecorder(stream);
-  chunks = [];
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recorder = new MediaRecorder(stream);
+    chunks = [];
 
-  mediaRecorder.ondataavailable = e => chunks.push(e.data);
+    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: "audio/webm" });
+      addAudio(blob);
+      status.textContent = "✅ Audio guardado";
+      stream.getTracks().forEach(t => t.stop());
+    };
 
-  mediaRecorder.onstop = () => {
-    const blob = new Blob(chunks, { type: "audio/webm" });
-    const url = URL.createObjectURL(blob);
+    recorder.start();
+    mic.classList.add("recording");
+    status.textContent = "🎙️ Grabando… suelta para guardar";
 
-    recordings.push({
-      date: new Date().toISOString(),
-      url
-    });
+  } catch (err) {
+    status.textContent = "❌ No se pudo acceder al micrófono";
+  }
+}, { passive: false });
 
-    localStorage.setItem("gymAudios", JSON.stringify(recordings));
-    renderAudios();
-
-    status.textContent = "✅ Audio guardado";
-    mediaRecorder = null;
-    stream.getTracks().forEach(t => t.stop());
-  };
-
-  mediaRecorder.start();
-  mic.classList.add("recording");
-  status.textContent = "🎙️ Grabando…";
-});
-
-mic.addEventListener("touchend", () => {
-  if (!mediaRecorder) return;
-  mediaRecorder.stop();
-  mic.classList.remove("recording");
-  status.textContent = "⏳ Guardando…";
-});
+mic.addEventListener("touchend", (e) => {
+  e.preventDefault();
+  if (recorder && recorder.state === "recording") {
+    recorder.stop();
+    mic.classList.remove("recording");
+    status.textContent = "⏳ Guardando…";
+  }
+}, { passive: false });
 </script>
 
 </body>
