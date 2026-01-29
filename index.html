@@ -2,132 +2,138 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Gym Voice</title>
 
 <style>
 * {
   -webkit-user-select: none;
-  -webkit-touch-callout: none;
   user-select: none;
+  -webkit-touch-callout: none;
 }
 
 body {
   margin: 0;
   height: 100vh;
-  background: #0b132b;
+  background: radial-gradient(circle at center, #0f172a, #020617);
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  font-family: system-ui;
+  align-items: center;
+  font-family: system-ui, -apple-system;
   color: white;
+  touch-action: manipulation;
 }
 
 #mic {
-  width: 180px;
-  height: 180px;
+  width: 190px;
+  height: 190px;
   border-radius: 50%;
   background: #22c55e;
   display: flex;
-  align-items: center;
   justify-content: center;
-  font-size: 72px;
-
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
+  align-items: center;
+  box-shadow: 0 0 40px rgba(34,197,94,.6);
 }
 
 #mic.recording {
   background: #ef4444;
+  box-shadow: 0 0 50px rgba(239,68,68,.7);
+}
+
+#mic img {
+  width: 120px;
+  pointer-events: none;
 }
 
 #status {
-  margin-top: 20px;
+  margin-top: 22px;
   font-size: 16px;
-  opacity: 0.9;
+  opacity: .9;
 }
 
-#audios {
+#log {
   position: fixed;
   bottom: 0;
   width: 100%;
-  max-height: 35%;
-  overflow-y: auto;
-  background: rgba(0,0,0,0.3);
+  background: rgba(2,6,23,.85);
   padding: 10px;
-  box-sizing: border-box;
-  font-size: 14px;
-}
-
-.audio-item {
-  margin-bottom: 10px;
+  font-size: 13px;
+  text-align: center;
 }
 </style>
 </head>
 
 <body>
 
-<div id="mic" draggable="false">🏋️</div>
+<div id="mic">
+  <img src="avatar.png" alt="Atleta">
+</div>
+
 <div id="status">Mantén pulsado para grabar</div>
 
-<div id="audios"></div>
+<div id="log"></div>
 
 <script>
-let recorder;
-let stream;
-let chunks = [];
+let mediaRecorder;
+let audioChunks = [];
+let isRecording = false;
 
 const mic = document.getElementById("mic");
 const status = document.getElementById("status");
-const audios = document.getElementById("audios");
+const logBox = document.getElementById("log");
 
-function addAudio(blob) {
-  const url = URL.createObjectURL(blob);
-  const div = document.createElement("div");
-  div.className = "audio-item";
-  div.innerHTML = `
-    🗓 ${new Date().toLocaleString()}<br>
-    <audio controls src="${url}"></audio>
-  `;
-  audios.prepend(div);
+function saveEntry(blob) {
+  const entries = JSON.parse(localStorage.getItem("gymAudio")) || [];
+  entries.push({
+    date: new Date().toLocaleString(),
+    audio: URL.createObjectURL(blob)
+  });
+  localStorage.setItem("gymAudio", JSON.stringify(entries));
+  logBox.textContent = "🎧 Audio guardado (" + entries[entries.length - 1].date + ")";
 }
 
-mic.addEventListener("touchstart", async (e) => {
-  e.preventDefault();
-
+async function startRecording() {
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    recorder = new MediaRecorder(stream);
-    chunks = [];
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
 
-    recorder.ondataavailable = e => chunks.push(e.data);
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: "audio/webm" });
-      addAudio(blob);
-      status.textContent = "✅ Audio guardado";
-      stream.getTracks().forEach(t => t.stop());
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(audioChunks, { type: "audio/webm" });
+      saveEntry(blob);
     };
 
-    recorder.start();
+    mediaRecorder.start();
+    isRecording = true;
     mic.classList.add("recording");
-    status.textContent = "🎙️ Grabando… suelta para guardar";
-
-  } catch (err) {
-    status.textContent = "❌ No se pudo acceder al micrófono";
+    status.textContent = "🎙️ Grabando...";
+  } catch {
+    status.textContent = "❌ Micrófono no disponible";
   }
-}, { passive: false });
+}
 
-mic.addEventListener("touchend", (e) => {
+function stopRecording() {
+  if (!isRecording) return;
+  mediaRecorder.stop();
+  isRecording = false;
+  mic.classList.remove("recording");
+  status.textContent = "✅ Grabación guardada";
+}
+
+mic.addEventListener("touchstart", e => {
   e.preventDefault();
-  if (recorder && recorder.state === "recording") {
-    recorder.stop();
-    mic.classList.remove("recording");
-    status.textContent = "⏳ Guardando…";
-  }
-}, { passive: false });
+  startRecording();
+});
+
+mic.addEventListener("touchend", e => {
+  e.preventDefault();
+  stopRecording();
+});
+
+mic.addEventListener("mousedown", startRecording);
+mic.addEventListener("mouseup", stopRecording);
 </script>
 
 </body>
