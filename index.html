@@ -1,15 +1,14 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Gym Voice</title>
 
 <style>
 * {
   -webkit-user-select: none;
   user-select: none;
-  -webkit-touch-callout: none;
 }
 
 body {
@@ -18,32 +17,31 @@ body {
   background: #0b132b;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
-  font-family: system-ui;
+  justify-content: center;
   color: white;
+  font-family: system-ui;
 }
 
 #mic {
-  width: 170px;
-  height: 170px;
+  width: 160px;
+  height: 160px;
   border-radius: 50%;
   background: #22c55e;
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   font-size: 64px;
-  box-shadow: 0 0 40px rgba(34,197,94,.6);
 }
 
 #mic.recording {
   background: #ef4444;
-  box-shadow: 0 0 40px rgba(239,68,68,.7);
 }
 
 #status {
   margin-top: 20px;
   font-size: 16px;
+  opacity: 0.9;
 }
 
 #notes {
@@ -51,13 +49,14 @@ body {
   bottom: 0;
   width: 100%;
   max-height: 35%;
-  background: rgba(255,255,255,0.05);
-  padding: 12px;
   overflow-y: auto;
-  font-size: 14px;
+  background: rgba(0,0,0,0.4);
+  padding: 12px;
+  box-sizing: border-box;
 }
 
 .note {
+  font-size: 14px;
   margin-bottom: 6px;
   opacity: 0.85;
 }
@@ -67,72 +66,88 @@ body {
 <body>
 
 <div id="mic">🏋️</div>
-<div id="status">Mantén pulsado para grabar</div>
+<div id="status">Mantén pulsado para hablar</div>
 <div id="notes"></div>
 
 <script>
+const SpeechRecognition = window.webkitSpeechRecognition;
 const mic = document.getElementById("mic");
 const status = document.getElementById("status");
 const notesBox = document.getElementById("notes");
 
-let mediaRecorder;
-let audioChunks = [];
+let recognition;
 let recording = false;
+let startTime = 0;
 
 let log = JSON.parse(localStorage.getItem("gymLog")) || [];
 
+function getWeek(date) {
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(),0,4);
+  return d.getFullYear() + "-W" +
+    String(1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay()+6)%7) / 7)).padStart(2,"0");
+}
+
 function renderNotes() {
   notesBox.innerHTML = log
-    .slice(-20)
+    .slice(-10)
     .reverse()
-    .map(n => `<div class="note">• ${n.text}</div>`)
+    .map(n => `<div class="note">🗓 ${n.week} · ${n.text}</div>`)
     .join("");
 }
 
 renderNotes();
 
-async function startRecording() {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  mediaRecorder = new MediaRecorder(stream);
-  audioChunks = [];
+mic.addEventListener("touchstart", () => {
+  if (!SpeechRecognition || recording) return;
 
-  mediaRecorder.ondataavailable = e => {
-    audioChunks.push(e.data);
-  };
+  recognition = new SpeechRecognition();
+  recognition.lang = "es-ES";
+  recognition.interimResults = false;
+  recognition.continuous = false;
 
-  mediaRecorder.onstop = () => {
+  startTime = Date.now();
+  recording = true;
+  mic.classList.add("recording");
+  status.textContent = "🎙️ Escuchando…";
+
+  recognition.start();
+
+  recognition.onresult = (e) => {
+    const text = e.results[0][0].transcript;
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    const date = new Date().toISOString();
+
     log.push({
-      text: "🎙️ Audio guardado (" + new Date().toLocaleTimeString() + ")",
-      date: new Date().toISOString()
+      id: Date.now(),
+      date,
+      week: getWeek(date),
+      duration,
+      text
     });
 
     localStorage.setItem("gymLog", JSON.stringify(log));
     renderNotes();
-    status.textContent = "✅ Grabación guardada";
+
+    status.textContent = "✅ Guardado";
   };
 
-  mediaRecorder.start();
-}
+  recognition.onerror = () => {
+    status.textContent = "❌ Error de voz";
+  };
 
-mic.addEventListener("touchstart", async (e) => {
-  e.preventDefault();
-  if (recording) return;
-
-  recording = true;
-  mic.classList.add("recording");
-  status.textContent = "🎙️ Grabando…";
-
-  await startRecording();
+  recognition.onend = () => {
+    recording = false;
+    mic.classList.remove("recording");
+  };
 });
 
 mic.addEventListener("touchend", () => {
-  if (!recording) return;
-
-  recording = false;
-  mic.classList.remove("recording");
-  status.textContent = "⏳ Guardando…";
-
-  mediaRecorder.stop();
+  if (recording && recognition) {
+    recognition.stop();
+  }
 });
 </script>
 
