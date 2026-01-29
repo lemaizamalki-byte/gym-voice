@@ -6,10 +6,7 @@
 <title>Gym Voice</title>
 
 <style>
-* {
-  -webkit-user-select: none;
-  user-select: none;
-}
+* { user-select: none; -webkit-user-select: none; }
 
 body {
   margin: 0;
@@ -19,8 +16,8 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: white;
   font-family: system-ui;
+  color: white;
 }
 
 #mic {
@@ -34,14 +31,12 @@ body {
   font-size: 64px;
 }
 
-#mic.recording {
-  background: #ef4444;
-}
+#mic.recording { background: #ef4444; }
 
 #status {
-  margin-top: 20px;
+  margin-top: 18px;
   font-size: 16px;
-  opacity: 0.9;
+  opacity: .9;
 }
 
 #notes {
@@ -50,15 +45,13 @@ body {
   width: 100%;
   max-height: 35%;
   overflow-y: auto;
-  background: rgba(0,0,0,0.4);
-  padding: 12px;
-  box-sizing: border-box;
+  background: rgba(0,0,0,.4);
+  padding: 10px;
 }
 
 .note {
   font-size: 14px;
   margin-bottom: 6px;
-  opacity: 0.85;
 }
 </style>
 </head>
@@ -70,24 +63,23 @@ body {
 <div id="notes"></div>
 
 <script>
-const SpeechRecognition = window.webkitSpeechRecognition;
 const mic = document.getElementById("mic");
 const status = document.getElementById("status");
 const notesBox = document.getElementById("notes");
 
-let recognition;
+let recognition = null;
 let recording = false;
+let safetyTimer = null;
 let startTime = 0;
 
 let log = JSON.parse(localStorage.getItem("gymLog")) || [];
 
 function getWeek(date) {
   const d = new Date(date);
-  d.setHours(0,0,0,0);
-  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
-  const week1 = new Date(d.getFullYear(),0,4);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  const yearStart = new Date(d.getFullYear(), 0, 1);
   return d.getFullYear() + "-W" +
-    String(1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay()+6)%7) / 7)).padStart(2,"0");
+    Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
 }
 
 function renderNotes() {
@@ -97,28 +89,55 @@ function renderNotes() {
     .map(n => `<div class="note">🗓 ${n.week} · ${n.text}</div>`)
     .join("");
 }
-
 renderNotes();
 
+function stopAll() {
+  if (recognition) {
+    try { recognition.abort(); } catch {}
+    recognition = null;
+  }
+  clearTimeout(safetyTimer);
+  recording = false;
+  mic.classList.remove("recording");
+}
+
 mic.addEventListener("touchstart", () => {
-  if (!SpeechRecognition || recording) return;
+  if (recording) return;
 
-  recognition = new SpeechRecognition();
+  if (!window.webkitSpeechRecognition) {
+    status.textContent = "❌ Safari no soporta voz";
+    return;
+  }
+
+  recognition = new webkitSpeechRecognition();
   recognition.lang = "es-ES";
-  recognition.interimResults = false;
   recognition.continuous = false;
+  recognition.interimResults = false;
 
-  startTime = Date.now();
   recording = true;
+  startTime = Date.now();
   mic.classList.add("recording");
   status.textContent = "🎙️ Escuchando…";
 
   recognition.start();
 
+  // ⏱️ CORTE DE SEGURIDAD (CLAVE)
+  safetyTimer = setTimeout(() => {
+    stopAll();
+    status.textContent = "⚠️ Tiempo agotado";
+  }, 7000);
+
   recognition.onresult = (e) => {
-    const text = e.results[0][0].transcript;
-    const duration = Math.round((Date.now() - startTime) / 1000);
+    stopAll();
+
+    const text = e.results?.[0]?.[0]?.transcript;
+    if (!text) {
+      status.textContent = "❌ No se detectó voz";
+      return;
+    }
+
     const date = new Date().toISOString();
+    const duration = Math.round((Date.now() - startTime) / 1000);
 
     log.push({
       id: Date.now(),
@@ -131,23 +150,19 @@ mic.addEventListener("touchstart", () => {
     localStorage.setItem("gymLog", JSON.stringify(log));
     renderNotes();
 
-    status.textContent = "✅ Guardado";
+    status.textContent = "✅ Grabación guardada";
   };
 
   recognition.onerror = () => {
-    status.textContent = "❌ Error de voz";
-  };
-
-  recognition.onend = () => {
-    recording = false;
-    mic.classList.remove("recording");
+    stopAll();
+    status.textContent = "❌ Error de micrófono";
   };
 });
 
 mic.addEventListener("touchend", () => {
-  if (recording && recognition) {
-    recognition.stop();
-  }
+  if (!recording) return;
+  stopAll();
+  status.textContent = "⏳ Procesando…";
 });
 </script>
 
